@@ -60,7 +60,7 @@ h2{font:500 11px/1 Oswald,system-ui;letter-spacing:.2em;text-transform:uppercase
 #track i.done{background:var(--c);opacity:1}
 #track i.now{opacity:1;box-shadow:0 0 0 3px #ffffff1a}
 .bar{height:4px;background:#ffffff1a;border-radius:3px;overflow:hidden}
-.bar i{display:block;height:100%;width:0;background:var(--c);transition:width .3s linear}
+.bar i{display:block;height:100%;width:100%;background:var(--c);transform:scaleX(0);transform-origin:left center;transition:transform 1s linear;will-change:transform}
 .meta{display:flex;justify-content:space-between;gap:12px;font-size:12px;color:#8ba3ad}
 .row{display:flex;gap:10px}
 button{flex:1;font:500 15px/1 Oswald,system-ui;letter-spacing:.14em;text-transform:uppercase;padding:14px;border-radius:6px;border:1px solid var(--c);background:transparent;color:var(--c);cursor:pointer}
@@ -612,23 +612,43 @@ function subtext(s){
 }
 
 /* ---- render ---- */
-function paint(){
- var s=S[idx];pt.dataset.k=s.k;
- if(s.x!==lastX){lastX=s.x;var e=PICK[s.x],h='';
-  e.sets.forEach(function(v){h+='<span>'+(v==1?secs(e.c.rp):v)+'</span>';});$('lad').innerHTML=h;}
- $('exn').textContent=PICK[s.x].n;
- $('phase').textContent=label(s);$('sub').textContent=subtext(s);$('time').textContent=fmt(rem);
- var pips=$('pips').getElementsByTagName('b'),lad=$('lad').getElementsByTagName('span');
- for(var j=0;j<pips.length;j++)pips[j].className=j<=s.x?'on':'';
- for(var j=0;j<lad.length;j++)lad[j].className=j===s.si?'on':'';
- var t='';
- if((s.k=='w'||s.k=='p')&&!s.m&&s.n>1){for(var j=1;j<=s.n;j++)t+='<i class="'+(j<s.i?'done':j==s.i?(s.k=='p'?'done now':'now'):'')+'"></i>';}
- $('track').className=(s.n>12?'sm':'');$('track').innerHTML=t;
- var done=cum[idx]+(s.d-rem);
- $('bar').style.width=(100*done/tot)+'%';
- $('tot').textContent=clock(tot-done)+' left';
- $('nxt').textContent=S[idx+1]?'Next: '+label(S[idx+1]):'Last interval';
+var shownSec=-1,E={};
+function cacheEls(){
+ ['exn','phase','sub','time','track','bar','tot','nxt','pips','lad'].forEach(function(k){E[k]=$(k);});
 }
+function paintStep(){
+ var s=S[idx];
+ if(pt.dataset.k!==s.k)pt.dataset.k=s.k;
+ if(s.x!==lastX){lastX=s.x;var e=PICK[s.x],h='';
+  e.sets.forEach(function(v){h+='<span>'+(v==1?secs(e.c.rp):v)+'</span>';});
+  E.lad.innerHTML=h;
+  E.exn.textContent=e.n;
+  var pips=E.pips.getElementsByTagName('b');
+  for(var j=0;j<pips.length;j++)pips[j].className=j<=s.x?'on':'';}
+ E.phase.textContent=label(s);
+ E.sub.textContent=subtext(s);
+ var lad=E.lad.getElementsByTagName('span');
+ for(var j=0;j<lad.length;j++){
+  var want=j===s.si?'on':'';
+  if(lad[j].className!==want)lad[j].className=want;}
+ var t='';
+ if((s.k=='w'||s.k=='p')&&!s.m&&s.n>1)
+  for(var j=1;j<=s.n;j++)t+='<i class="'+(j<s.i?'done':j==s.i?(s.k=='p'?'done now':'now'):'')+'"></i>';
+ E.track.className=(s.n>12?'sm':'');
+ E.track.innerHTML=t;
+ E.nxt.textContent=S[idx+1]?'Next: '+label(S[idx+1]):'Last interval';
+ shownSec=-1;
+}
+function paintTime(){
+ var w=Math.ceil(Math.max(0,rem));
+ if(w===shownSec)return;
+ shownSec=w;
+ E.time.textContent=fmt(rem);
+ var done=cum[idx]+(S[idx].d-rem);
+ E.bar.style.transform='scaleX('+(done/tot).toFixed(4)+')';
+ E.tot.textContent=clock(tot-done)+' left';
+}
+function paint(){paintStep();paintTime();}
 function enter(){var s=S[idx];rem=s.d;endAt=performance.now()+s.d*1000;fired={};
  clearTimeout(nTimer);
  if(s.k!=='g'){
@@ -639,13 +659,13 @@ function enter(){var s=S[idx];rem=s.d;endAt=performance.now()+s.d*1000;fired={};
  }
  seq(CUE[s.k]);if(s.m)met(s.d,s.m);sayLater(words(s));
  if(s.nat)nTimer=setTimeout(function(){say(PICK[s.x].an);},s.nat*1000);
- paint();}
+ paintStep();paintTime();}
 function finish(){run=false;clearInterval(tim);clearTicks();clearTimeout(nTimer);pt.dataset.k='d';
  if(curLap&&!curLap.end)curLap.end=Date.now();
  $('sk').hidden=true;$('xp').hidden=$('cp').hidden=laps.length===0;
  $('exn').textContent='';$('phase').textContent='Done';$('time').textContent='\u2713';
  $('sub').textContent=PICK.length+(PICK.length==1?' exercise':' exercises')+' complete';
- $('track').innerHTML='';$('bar').style.width='100%';$('tot').textContent='';
+ $('track').innerHTML='';$('bar').style.transform='scaleX(1)';$('tot').textContent='';
  $('nxt').textContent='';$('go').textContent='Restart';seq(CUE.d);say('Workout complete. Nice work.');}
 function tick(){
  rem=(endAt-performance.now())/1000;
@@ -653,7 +673,7 @@ function tick(){
   for(var k=3;k>=1;k--){var ld=rem-k;
    if(ld>.05&&ld<.9&&!fired[k]){fired[k]=1;tone(1000,.09,ac.currentTime+ld,.6);}}
  if(rem<=0){idx++;if(idx>=S.length)return finish();return enter();}
- paint();
+ paintTime();
 }
 function arm(){
  idx=0;rem=S[0].d;endAt=0;lastTick=-1;lastX=-1;run=false;pt.dataset.k='g';
@@ -661,7 +681,7 @@ function arm(){
  h='';PICK[0].sets.forEach(function(v){h+='<span>'+(v==1?secs(PICK[0].c.rp):v)+'</span>';});$('lad').innerHTML=h;
  $('go').textContent='Start';$('phase').textContent='Ready';$('time').textContent='\u2014';
  $('exn').textContent=PICK[0].n;$('sub').textContent='Press start to begin';
- $('track').innerHTML='';$('track').className='';$('bar').style.width='0';
+ cacheEls();$('track').innerHTML='';$('track').className='';$('bar').style.transform='scaleX(0)';shownSec=-1;
  $('nxt').textContent='';$('tot').textContent=clock(tot);
  var lad=$('lad').getElementsByTagName('span');
  for(var j=0;j<lad.length;j++)lad[j].className=j===0?'on':'';
@@ -672,7 +692,7 @@ function start(){
  if($('go').textContent=='Restart')arm();
  run=true;$('go').textContent='Pause';
  if(!endAt)enter();else{endAt=performance.now()+rem*1000;fired={};var q=S[idx];if(q.m)met(rem,q.m);}
- clearInterval(tim);tim=setInterval(tick,60);
+ clearInterval(tim);tim=setInterval(tick,200);
 }
 function hold(){run=false;clearInterval(tim);clearTicks();clearTimeout(sTimer);clearTimeout(nTimer);clearTimeout(uTimer);$('go').textContent='Resume';if(window.speechSynthesis)speechSynthesis.cancel();}
 function skip(){
